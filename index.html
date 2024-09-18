@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>GPS Track Visualization (KML) with Smooth Animation</title>
+		<link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+		<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.fullscreen/1.6.0/Control.FullScreen.css" />
+		<link rel="preconnect" href="https://fonts.googleapis.com" />
+		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+		<link href="https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&display=swap" rel="stylesheet" />
+		<style>
+			body {
+				margin: 0;
+				padding: 0;
+				font-family: 'Poppins', sans-serif;
+			}
+			#map {
+				position: absolute;
+				top: 0;
+				bottom: 0;
+				width: 100%;
+			}
+			.route-label {
+				background-color: rgba(255, 255, 255, 0.4);
+				border: none;
+				padding: 3px 8px;
+				border-radius: 8px;
+				font-weight: bold;
+				white-space: nowrap;
+				backdrop-filter: blur(10px);
+				-webkit-backdrop-filter: blur(10px);
+				width: fit-content !important;
+			}
+			.leaflet-control {
+				display: flex;
+				flex-direction: column;
+				align-items: center;
+				justify-content: center;
+				gap: 6px;
+			}
+			.leaflet-control-zoom-in,
+			.leaflet-control-zoom-out,
+			.leaflet-control-zoom-fullscreen {
+				padding: 6px;
+			}
+			.leaflet-bar {
+				border: none !important;
+			}
+			.leaflet-control-attribution {
+				display: none;
+			}
+			#controls {
+				position: absolute;
+				max-width: 210px;
+				top: 10px;
+				right: 10px;
+				z-index: 1000;
+				background: rgba(255, 255, 255, 0.4);
+				border-radius: 8px;
+				box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+				backdrop-filter: blur(10px);
+				-webkit-backdrop-filter: blur(10px);
+			}
+			#routeToggle {
+				margin-top: 15px;
+			}
+			#toggleControls {
+				cursor: pointer;
+				font-weight: bold;
+				text-align: right;
+				font-size: 20px;
+
+				.x {
+					width: 36px;
+					height: auto;
+					padding: 6px;
+				}
+
+				.settings {
+					display: none;
+					width: 22px;
+					height: auto;
+					padding: 12px;
+				}
+
+				&.hidden {
+					.x {
+						display: none;
+					}
+					.settings {
+						display: block;
+					}
+				}
+			}
+
+			#controlContent {
+				padding: 0 12px 12px 12px;
+				transition: all 0.3s ease-in-out;
+
+				&.hidden {
+					display: none;
+				}
+			}
+			#controls button,
+			#controls select {
+				width: 100%;
+				padding: 5px;
+				margin-top: 5px;
+				font-family: 'Poppins', sans-serif;
+				border-radius: 8px;
+				border: none;
+				background-color: rgba(255, 255, 255, 0.7);
+			}
+			.leaflet-control-zoom a,
+			.leaflet-control-fullscreen a {
+				background-color: rgba(255, 255, 255, 0.7) !important;
+				color: #333 !important;
+				border: none !important;
+				backdrop-filter: blur(10px);
+				-webkit-backdrop-filter: blur(10px);
+				border-radius: 8px !important;
+				transition: all 0.3s ease-in-out;
+			}
+			.leaflet-control-zoom a:hover,
+			.leaflet-control-fullscreen a:hover {
+				background-color: rgba(255, 255, 255, 0.5) !important;
+			}
+			.leaflet-control-zoom {
+				border-radius: 8px !important;
+			}
+
+			[type='checkbox'] {
+
+				margin-right: 8px;
+			}
+
+			#animateAll, #routeSelect, #toggleLabels {
+				transition: all 0.3s ease-in-out;
+			}
+
+			#animateAll:hover, #routeSelect:hover, #toggleLabels:hover {
+				background-color: rgba(255, 255, 255, 0.5);
+			}
+		</style>
+	</head>
+	<body>
+		<div id="map"></div>
+		<div id="controls">
+			<div id="toggleControls">
+				<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="icons x" viewBox="0 0 16 16">
+					<path d="M4.646 4.646a.5.5 0 0 1 .708 0L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708L8.707 8l2.647 2.646a.5.5 0 0 1-.708.708L8 8.707l-2.646 2.647a.5.5 0 0 1-.708-.708L7.293 8 4.646 5.354a.5.5 0 0 1 0-.708" />
+				</svg>
+				<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="icons settings" viewBox="0 0 16 16">
+					<path d="M8 4.754a3.246 3.246 0 1 0 0 6.492 3.246 3.246 0 0 0 0-6.492M5.754 8a2.246 2.246 0 1 1 4.492 0 2.246 2.246 0 0 1-4.492 0" />
+					<path d="M9.796 1.343c-.527-1.79-3.065-1.79-3.592 0l-.094.319a.873.873 0 0 1-1.255.52l-.292-.16c-1.64-.892-3.433.902-2.54 2.541l.159.292a.873.873 0 0 1-.52 1.255l-.319.094c-1.79.527-1.79 3.065 0 3.592l.319.094a.873.873 0 0 1 .52 1.255l-.16.292c-.892 1.64.901 3.434 2.541 2.54l.292-.159a.873.873 0 0 1 1.255.52l.094.319c.527 1.79 3.065 1.79 3.592 0l.094-.319a.873.873 0 0 1 1.255-.52l.292.16c1.64.893 3.434-.902 2.54-2.541l-.159-.292a.873.873 0 0 1 .52-1.255l.319-.094c1.79-.527 1.79-3.065 0-3.592l-.319-.094a.873.873 0 0 1-.52-1.255l.16-.292c.893-1.64-.902-3.433-2.541-2.54l-.292.159a.873.873 0 0 1-1.255-.52zm-2.633.283c.246-.835 1.428-.835 1.674 0l.094.319a1.873 1.873 0 0 0 2.693 1.115l.291-.16c.764-.415 1.6.42 1.184 1.185l-.159.292a1.873 1.873 0 0 0 1.116 2.692l.318.094c.835.246.835 1.428 0 1.674l-.319.094a1.873 1.873 0 0 0-1.115 2.693l.16.291c.415.764-.42 1.6-1.185 1.184l-.291-.159a1.873 1.873 0 0 0-2.693 1.116l-.094.318c-.246.835-1.428.835-1.674 0l-.094-.319a1.873 1.873 0 0 0-2.692-1.115l-.292.16c-.764.415-1.6-.42-1.184-1.185l.159-.291A1.873 1.873 0 0 0 1.945 8.93l-.319-.094c-.835-.246-.835-1.428 0-1.674l.319-.094A1.873 1.873 0 0 0 3.06 4.377l-.16-.292c-.415-.764.42-1.6 1.185-1.184l.292.159a1.873 1.873 0 0 0 2.692-1.115z" />
+				</svg>
+			</div>
+			<div id="controlContent">
+				<button id="animateAll">Restart Routes</button>
+				<select id="routeSelect">
+					<option value="">Select a route to follow</option>
+				</select>
+				<button id="toggleLabels">Hide Labels</button>
+				<div id="routeToggle"></div>
+			</div>
+		</div>
+
+		<script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+		<script src="https://api.mapbox.com/mapbox.js/plugins/leaflet-omnivore/v0.2.0/leaflet-omnivore.min.js"></script>
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.fullscreen/1.6.0/Control.FullScreen.min.js"></script>
+
+		<script>
+			const map = L.map('map', { fullscreenControl: true }).setView([0, 0], 2);
+
+			L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+				attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
+			}).addTo(map);
+
+			const routeColors = ['#0000FF', '#00FFFF', '#800080', '#FF00FF', '#FF0000', '#FFA500', '#FFFF00', '#00FF00', '#008000', '#00FFFF', '#FFFFFF', '#8B4513'];
+			const routeNames = Array.from({ length: 12 }, (_, i) => `T${String(i + 1).padStart(2, '0')}`);
+
+			let routes = [];
+			let animationInterval;
+			let labelsVisible = true;
+			let selectedRouteIndex = -1;
+			let animationProgress = 0;
+			const animationDuration = 45000; // 45 seconds
+			let userPanned = false;
+
+			function normalizeRoutePoints(points, targetLength) {
+				const result = [points[0]];
+				const totalDistance = points.reduce((acc, point, i) => {
+					if (i === 0) return 0;
+					return acc + point.distanceTo(points[i - 1]);
+				}, 0);
+
+				const stepDistance = totalDistance / (targetLength - 1);
+				let currentDistance = 0;
+				let currentIndex = 0;
+
+				for (let i = 1; i < targetLength - 1; i++) {
+					currentDistance += stepDistance;
+					while (currentIndex < points.length - 1 && points[currentIndex].distanceTo(points[0]) < currentDistance) {
+						currentIndex++;
+					}
+					if (currentIndex < points.length - 1) {
+						const prevPoint = points[currentIndex - 1];
+						const nextPoint = points[currentIndex];
+						const ratio = (currentDistance - prevPoint.distanceTo(points[0])) / (nextPoint.distanceTo(points[0]) - prevPoint.distanceTo(points[0]));
+						const lat = prevPoint.lat + (nextPoint.lat - prevPoint.lat) * ratio;
+						const lng = prevPoint.lng + (nextPoint.lng - prevPoint.lng) * ratio;
+						result.push(L.latLng(lat, lng));
+					}
+				}
+
+				result.push(points[points.length - 1]);
+				return result;
+			}
+
+			function updateCamera() {
+				if (selectedRouteIndex !== -1 && !userPanned) {
+					const selectedRoute = routes[selectedRouteIndex];
+					const currentPointIndex = Math.floor((animationProgress / animationDuration) * selectedRoute.points.length);
+					const lookAheadIndex = Math.min(currentPointIndex + 30, selectedRoute.points.length - 1);
+					if (currentPointIndex > 0 && lookAheadIndex > 0) {
+						const currentPoint = selectedRoute.points[currentPointIndex - 1];
+						const lookAheadPoint = selectedRoute.points[lookAheadIndex];
+						const bounds = L.latLngBounds(currentPoint, lookAheadPoint);
+						map.fitBounds(bounds, {
+							padding: [50, 50],
+							maxZoom: 12,
+							animate: true,
+							duration: 0.5,
+						});
+					}
+				}
+			}
+
+			function animateRoutes() {
+				clearInterval(animationInterval);
+				animationProgress = 0;
+				userPanned = false;
+
+				routes.forEach((route) => {
+					route.line.setLatLngs([]);
+					map.addLayer(route.line);
+					if (route.label) {
+						route.label.setLatLng(route.points[0]);
+						if (labelsVisible) {
+							map.addLayer(route.label);
+						}
+					}
+				});
+
+				const interval = 33; // ~30 fps
+
+				animationInterval = setInterval(() => {
+					animationProgress += interval;
+					const completion = Math.min(animationProgress / animationDuration, 1);
+
+					routes.forEach((route, index) => {
+						if (route.visible) {
+							const pointIndex = Math.floor(completion * route.points.length);
+							route.line.setLatLngs(route.points.slice(0, pointIndex));
+							if (route.label && pointIndex > 0) {
+								route.label.setLatLng(route.points[pointIndex - 1]);
+							}
+						}
+					});
+
+					updateCamera();
+
+					if (completion === 1) {
+						clearInterval(animationInterval);
+					}
+				}, interval);
+			}
+
+			function createRoutes(kmlLayer) {
+				const allPoints = [];
+				kmlLayer.eachLayer(function (layer) {
+					if (layer instanceof L.Polyline) {
+						allPoints.push(layer.getLatLngs());
+					}
+				});
+
+				const targetLength = 2000; // Increased target number of points for each route
+
+				routes = allPoints.map((points, index) => {
+					const normalizedPoints = normalizeRoutePoints(points, targetLength);
+					return {
+						points: normalizedPoints,
+						color: routeColors[index % routeColors.length],
+						name: routeNames[index],
+						visible: true,
+						line: L.polyline([], { color: routeColors[index % routeColors.length], weight: 3 }),
+					};
+				});
+
+				routes.forEach((route) => {
+					route.label = L.marker(route.points[0], {
+						icon: L.divIcon({
+							className: 'route-label',
+							html: `<span style="color:${route.color}">${route.name}</span>`,
+							iconSize: [100, 20],
+							iconAnchor: [0, 10],
+						}),
+					});
+				});
+
+				setupControls();
+				animateRoutes(); // Start animation automatically
+			}
+
+			function loadKML(url) {
+				omnivore
+					.kml(url)
+					.addTo(map)
+					.on('ready', function () {
+						const bounds = this.getBounds();
+						if (bounds.isValid()) {
+							map.fitBounds(bounds);
+						}
+						createRoutes(this);
+						this.remove(); // Remove the original KML layer
+					})
+					.on('error', function (error) {
+						console.error('Error loading KML:', error.error);
+					});
+			}
+
+			function setupControls() {
+				const routeSelect = document.getElementById('routeSelect');
+				const routeToggle = document.getElementById('routeToggle');
+				const toggleControls = document.getElementById('toggleControls');
+				const controlContent = document.getElementById('controlContent');
+
+				routes.forEach((route, index) => {
+					const option = document.createElement('option');
+					option.value = index;
+					option.textContent = route.name;
+					routeSelect.appendChild(option);
+
+					const checkbox = document.createElement('input');
+					checkbox.type = 'checkbox';
+					checkbox.id = `toggle-${index}`;
+					checkbox.checked = route.visible;
+					checkbox.addEventListener('change', (e) => {
+						route.visible = e.target.checked;
+						if (route.visible) {
+							map.addLayer(route.line);
+							if (labelsVisible) map.addLayer(route.label);
+						} else {
+							map.removeLayer(route.line);
+							map.removeLayer(route.label);
+						}
+					});
+
+					const label = document.createElement('label');
+					label.htmlFor = `toggle-${index}`;
+					label.textContent = route.name;
+					label.style.color = route.color;
+
+					const div = document.createElement('div');
+					div.appendChild(checkbox);
+					div.appendChild(label);
+					routeToggle.appendChild(div);
+				});
+
+				routeSelect.addEventListener('change', (e) => {
+					selectedRouteIndex = parseInt(e.target.value);
+					if (selectedRouteIndex !== -1) {
+						const selectedRoute = routes[selectedRouteIndex];
+						const currentPointIndex = Math.floor((animationProgress / animationDuration) * selectedRoute.points.length);
+						if (currentPointIndex > 0) {
+							map.setView(selectedRoute.points[currentPointIndex - 1], 12);
+						}
+						userPanned = false;
+					}
+				});
+
+				document.getElementById('animateAll').addEventListener('click', animateRoutes);
+
+				document.getElementById('toggleLabels').addEventListener('click', () => {
+					labelsVisible = !labelsVisible;
+					routes.forEach((route) => {
+						if (route.visible) {
+							if (labelsVisible) {
+								map.addLayer(route.label);
+							} else {
+								map.removeLayer(route.label);
+							}
+						}
+					});
+					document.getElementById('toggleLabels').textContent = labelsVisible ? 'Hide Labels' : 'Show Labels';
+				});
+
+				toggleControls.addEventListener('click', () => {
+					toggleControls.classList.toggle('hidden');
+					controlContent.classList.toggle('hidden');
+				});
+
+				map.on('zoomstart', function () {
+					userPanned = true;
+				});
+
+				map.on('dragstart', function () {
+					userPanned = true;
+				});
+			}
+
+			loadKML('EB24_Overview_Routen_final.kml');
+		</script>
+	</body>
+</html>
